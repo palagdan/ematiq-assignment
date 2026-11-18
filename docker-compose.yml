@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lunch
+      POSTGRES_PASSWORD: lunch
+      POSTGRES_DB: lunch
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lunch"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  rates:
+    build: ./rates
+    ports:
+      - "8001:8001"
+
+  # Catches outgoing email (password resets) locally; inbox UI on http://localhost:8026.
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    ports:
+      - "8026:8025"
+
+  backend:
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rates:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    environment:
+      LUNCH_DATABASE_URL: postgresql+asyncpg://lunch:lunch@postgres:5432/lunch
+      # Several workers on purpose: room updates fan out between them via Postgres LISTEN/NOTIFY.
+      WEB_CONCURRENCY: "2"
+      LUNCH_RATES_URL: http://rates:8001
+      # Defaults to the local Mailpit; override in a .env file to use a real mail server.
+      LUNCH_SMTP_HOST: ${LUNCH_SMTP_HOST:-mailpit}
+      LUNCH_SMTP_PORT: ${LUNCH_SMTP_PORT:-1025}
+      LUNCH_SMTP_USERNAME: ${LUNCH_SMTP_USERNAME:-}
+      LUNCH_SMTP_PASSWORD: ${LUNCH_SMTP_PASSWORD:-}
+      LUNCH_SMTP_SECURITY: ${LUNCH_SMTP_SECURITY:-none}
+      LUNCH_MAIL_FROM: ${LUNCH_MAIL_FROM:-Lunch Roulette <no-reply@lunch-roulette.local>}
+      LUNCH_PUBLIC_URL: ${LUNCH_PUBLIC_URL:-}
+      LUNCH_SECRET_KEY: ${LUNCH_SECRET_KEY:-change-me-in-production}
+      LUNCH_GOOGLE_CLIENT_ID: ${LUNCH_GOOGLE_CLIENT_ID:-}
+      LUNCH_GOOGLE_CLIENT_SECRET: ${LUNCH_GOOGLE_CLIENT_SECRET:-}
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
