@@ -55,6 +55,7 @@ ignore_missing_imports = true
 [tool.coverage.run]
 source = ["lunch"]
 branch = true
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 # CI fails if coverage drops below this (currently ~98% with branch coverage).
@@ -70,5 +71,8 @@ exclude_also = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::authlib.deprecate.AuthlibDeprecationWarning",
+]
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
